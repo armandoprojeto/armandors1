@@ -4,10 +4,24 @@ import { db, auth } from "../firebaseConfig";
 import { useNavigate } from "react-router-dom";
 
 async function enviarMensagemWhatsApp(numero, mensagem) {
-    console.log(`Mensagem para ${numero}: ${mensagem}`);
-    // Aqui você pode colocar a integração real com WhatsApp
-    // Ex: window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`, '_blank');
+    try {
+        const response = await fetch("http://192.168.15.3:3001/enviar-mensagem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ numero, mensagem }),
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error(data.message);
+        }
+    } catch (error) {
+        console.error("Erro ao enviar mensagem:", error);
+        throw error;
+    }
 }
+// aqui estamos importando as dependências necessárias, incluindo o React, hooks do Firebase e a função para enviar mensagens via WhatsApp.//
 
 export default function Solicitacoes() {
     const [solicitacoes, setSolicitacoes] = useState([]);
