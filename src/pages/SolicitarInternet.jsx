@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth'; // Removido signInAnonymously
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 // Componente principal da aplicação
@@ -20,8 +20,8 @@ const App = () => {
         messagingSenderId: "21549012582",
         appId: "1:21549012582:web:93c4020cfbc6741a877fa7",
         measurementId: "G-SVNXXJ2N4T"
-
     };
+
     const firebaseConfig = typeof __firebase_config !== 'undefined' && Object.keys(JSON.parse(__firebase_config)).length > 0
         ? JSON.parse(__firebase_config)
         : defaultFirebaseConfig; // Usa o fallback se a config do ambiente estiver vazia ou indefinida
@@ -56,9 +56,6 @@ const App = () => {
         observacoes: '',
     });
 
-
-
-
     // Estado para controlar a mensagem de sucesso após o envio
     const [submissionMessage, setSubmissionMessage] = useState('');
 
@@ -66,6 +63,51 @@ const App = () => {
     const [errors, setErrors] = useState({});
 
     // Efeito para inicializar o Firebase e autenticar o usuário
+    useEffect(() => {
+        const initializeFirebase = async () => {
+            try {
+                // Inicializa o aplicativo Firebase
+                const app = initializeApp(firebaseConfig);
+                const firestoreDb = getFirestore(app);
+                const firebaseAuth = getAuth(app);
+
+                setDb(firestoreDb);
+                setAuth(firebaseAuth);
+
+                // Listener para mudanças no estado de autenticação
+                const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+                    if (user) {
+                        // Usuário logado
+                        setUserId(user.uid);
+                        setIsAuthReady(true);
+                        setSubmissionMessage(''); // Limpa a mensagem quando a autenticação é bem-sucedida
+                    } else {
+                        // Usuário deslogado ou não autenticado
+                        setUserId(null);
+                        setIsAuthReady(false);
+                        // Se o token de autenticação inicial estiver disponível, tenta fazer login
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                        } else {
+                            // Se não houver token e não houver usuário logado, o aplicativo não estará pronto.
+                            // A mensagem de erro será exibida no handleSubmit se o usuário tentar enviar.
+                            console.warn("Nenhum token de autenticação inicial fornecido e nenhum usuário logado. O aplicativo não permitirá o envio de dados.");
+                        }
+                    }
+                });
+
+                // Limpa o listener ao desmontar o componente
+                return () => unsubscribe();
+
+            } catch (error) {
+                console.error("Erro ao inicializar Firebase ou autenticar:", error);
+                setSubmissionMessage(`❌ Erro de inicialização/autenticação: ${error.message}.`);
+                setIsAuthReady(false);
+            }
+        };
+
+        initializeFirebase();
+    }, [firebaseConfig, initialAuthToken]); // Dependências para re-executar se a config ou token mudar
 
     // Manipulador de mudança para atualizar o estado do formulário
     const handleChange = (e) => {
@@ -157,7 +199,8 @@ const App = () => {
 
         // Verifica se o Firebase está pronto para uso
         if (!isAuthReady || !db || !userId) {
-            setSubmissionMessage('Aguarde a inicialização e autenticação do aplicativo.');
+            // Se o Firebase não estiver pronto, impedimos o envio e mostramos uma mensagem de erro
+            setSubmissionMessage('❌ O aplicativo não está pronto para enviar dados. Por favor, certifique-se de estar autenticado.');
             return;
         }
 
@@ -165,13 +208,13 @@ const App = () => {
             try {
                 // Define o nome da coleção com base no tipo de local
                 // Isso garante que as solicitações de "feirinha" e "residência" sejam salvas em coleções separadas.
-                const colecaoBase = formData.tipoLocal === 'feirinha' ? 'feirinha-clientes' : 'residencia-clientes';
-                // Constrói o caminho completo da coleção de acordo com as regras do Canvas
-                const fullCollectionPath = "solicitacoes-clientes";
-
+                // As regras de segurança do Firestore no Canvas esperam o caminho: /artifacts/{appId}/users/{userId}/{your_collection_name}
+                // Ou para dados públicos: /artifacts/{appId}/public/data/{your_collection_name}
+                // Para este formulário, vamos usar o caminho privado do usuário para as solicitações.
+                const userSpecificCollectionPath = `artifacts/${appId}/users/${userId}/solicitacoes-clientes`;
 
                 // Dados a serem salvos no Firestore
-                await addDoc(collection(db, fullCollectionPath), {
+                await addDoc(collection(db, userSpecificCollectionPath), {
                     nome: formData.nomeCompleto,
                     cpf: formData.cpf,
                     contato: formData.telefone,
@@ -204,7 +247,6 @@ const App = () => {
                     userId: userId // Adiciona o ID do usuário que enviou a solicitação
                 });
 
-                //console.log('Dados do formulário enviados e salvos no Firestore:', formData);//
                 setSubmissionMessage('✅ Solicitação enviada com sucesso!');
                 // Limpa o formulário após o envio
                 setFormData({
@@ -269,7 +311,7 @@ const App = () => {
                                 name="nomeCompleto"
                                 value={formData.nomeCompleto}
                                 onChange={handleChange}
-                                className={`shadow appearance-none border rounded-lg w-full py-4 px-5 sm:py-5 sm:px-6 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-200 text-lg sm:text-xl ${errors.nomeComplepto ? 'border-red-500' : 'border-gray-300'
+                                className={`shadow appearance-none border rounded-lg w-full py-4 px-5 sm:py-5 sm:px-6 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-200 text-lg sm:text-xl ${errors.nomeCompleto ? 'border-red-500' : 'border-gray-300'
                                     }`}
                                 placeholder="Seu nome completo"
                                 aria-label="Nome Completo"
