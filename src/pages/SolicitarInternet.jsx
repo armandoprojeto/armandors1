@@ -168,7 +168,7 @@ const App = () => {
             try {
                 // Para formulários públicos sem autenticação de usuário, usamos o caminho público.
                 // As regras de segurança do Firestore no Canvas para dados públicos são: /artifacts/{appId}/public/data/{your_collection_name}
-                const publicCollectionPath = `artifacts/${appId}/public/data/solicitacoes-clientes-publicas`;
+                const publicCollectionPath = `solicitacoes-clientes`;
 
                 // Dados a serem salvos no Firestore
                 await addDoc(collection(db, publicCollectionPath), {
