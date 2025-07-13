@@ -66,52 +66,6 @@ const App = () => {
     const [errors, setErrors] = useState({});
 
     // Efeito para inicializar o Firebase e autenticar o usuário
-    useEffect(() => {
-        // Verifica se as configurações do Firebase estão disponíveis
-        if (Object.keys(firebaseConfig).length === 0 || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-            console.warn("Using placeholder Firebase config. Please provide your actual Firebase credentials.");
-            setSubmissionMessage('Atenção: Configuração do Firebase inválida.');
-            setIsAuthReady(true);
-            return;
-        }
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            const firestore = getFirestore(app);
-            const firebaseAuth = getAuth(app);
-
-            setDb(firestore);
-            setAuth(firebaseAuth);
-
-            // Listener para mudanças de autenticação
-            const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
-                if (user) {
-                    setUserId(user.uid);
-                } else {
-                    if (initialAuthToken) {
-                        try {
-                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
-                            setUserId(firebaseAuth.currentUser?.uid || crypto.randomUUID());
-                        } catch (error) {
-                            console.error("Erro ao usar token personalizado:", error);
-                            setSubmissionMessage("Erro ao autenticar com token.");
-                        }
-                    } else {
-                        // Página pública: nenhuma autenticação será feita
-                        console.log("Página pública acessada sem autenticação.");
-                        setUserId(crypto.randomUUID()); // Opcional, caso precise de um ID temporário
-                    }
-                }
-
-                setIsAuthReady(true);
-            });
-
-            return () => unsubscribe();
-        } catch (error) {
-            console.error("Erro na inicialização do Firebase:", error);
-            setSubmissionMessage(`Erro ao inicializar o Firebase: ${error.message}.`);
-        }
-    }, [firebaseConfig, initialAuthToken]);
 
     // Manipulador de mudança para atualizar o estado do formulário
     const handleChange = (e) => {
@@ -250,7 +204,7 @@ const App = () => {
                     userId: userId // Adiciona o ID do usuário que enviou a solicitação
                 });
 
-                console.log('Dados do formulário enviados e salvos no Firestore:', formData);
+                //console.log('Dados do formulário enviados e salvos no Firestore:', formData);//
                 setSubmissionMessage('✅ Solicitação enviada com sucesso!');
                 // Limpa o formulário após o envio
                 setFormData({
