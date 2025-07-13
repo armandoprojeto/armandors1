@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth'; // Removido signInAnonymously
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+// As importações de autenticação (getAuth, signInWithCustomToken, onAuthStateChanged) não são mais necessárias para este caso de uso público.
 
 // Componente principal da aplicação
 const App = () => {
     // Configurações e variáveis globais do Firebase
-    // As variáveis __app_id, __firebase_config, __initial_auth_token são injetadas pelo ambiente Canvas.
+    // As variáveis __app_id, __firebase_config são injetadas pelo ambiente Canvas.
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // Configuração de fallback do Firebase se __firebase_config não estiver definida pelo ambiente
-    // PARA USO EM PRODUÇÃO: VOCÊ PRECISA GARANTIR QUE SUAS CREDENCIAIS REAIS DO FIREBASE
-    // SEJAM INJETADAS PELO AMBIENTE OU SUBSTITUA ESTE OBJETO PELAS SUAS CREDENCIAIS.
     const defaultFirebaseConfig = {
         apiKey: "AIzaSyD0MkcbzP4ygxaVgTxJckNP42J4YqvxFy0",
         authDomain: "login-56fda.firebaseapp.com",
@@ -26,13 +24,9 @@ const App = () => {
         ? JSON.parse(__firebase_config)
         : defaultFirebaseConfig; // Usa o fallback se a config do ambiente estiver vazia ou indefinida
 
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
     // Estados para instâncias do Firebase
     const [db, setDb] = useState(null);
-    const [auth, setAuth] = useState(null);
-    const [userId, setUserId] = useState(null);
-    const [isAuthReady, setIsAuthReady] = useState(false); // Novo estado para indicar se a autenticação está pronta
+    const [isFirebaseInitialized, setIsFirebaseInitialized] = useState(false); // Novo estado para indicar se o Firebase está inicializado
 
     // Estados para armazenar os dados do formulário
     const [formData, setFormData] = useState({
@@ -62,52 +56,19 @@ const App = () => {
     // Estados para controlar mensagens de erro para cada campo
     const [errors, setErrors] = useState({});
 
-    // Efeito para inicializar o Firebase e autenticar o usuário
+    // Efeito para inicializar o Firebase (sem autenticação)
     useEffect(() => {
-        const initializeFirebase = async () => {
-            try {
-                // Inicializa o aplicativo Firebase
-                const app = initializeApp(firebaseConfig);
-                const firestoreDb = getFirestore(app);
-                const firebaseAuth = getAuth(app);
-
-                setDb(firestoreDb);
-                setAuth(firebaseAuth);
-
-                // Listener para mudanças no estado de autenticação
-                const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
-                    if (user) {
-                        // Usuário logado
-                        setUserId(user.uid);
-                        setIsAuthReady(true);
-                        setSubmissionMessage(''); // Limpa a mensagem quando a autenticação é bem-sucedida
-                    } else {
-                        // Usuário deslogado ou não autenticado
-                        setUserId(null);
-                        setIsAuthReady(false);
-                        // Se o token de autenticação inicial estiver disponível, tenta fazer login
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
-                        } else {
-                            // Se não houver token e não houver usuário logado, o aplicativo não estará pronto.
-                            // A mensagem de erro será exibida no handleSubmit se o usuário tentar enviar.
-                            console.warn("Nenhum token de autenticação inicial fornecido e nenhum usuário logado. O aplicativo não permitirá o envio de dados.");
-                        }
-                    }
-                });
-
-                // Limpa o listener ao desmontar o componente
-                return () => unsubscribe();
-
-            } catch (error) {
-                console.error("Erro ao inicializar Firebase ou autenticar:", error);
-                setSubmissionMessage(`❌ Erro de inicialização/autenticação: ${error.message}.`);
-                setIsAuthReady(false);
-            }
-        };
-
-        initializeFirebase();
-    }, [firebaseConfig, initialAuthToken]); // Dependências para re-executar se a config ou token mudar
+        try {
+            const app = initializeApp(firebaseConfig);
+            const firestoreDb = getFirestore(app);
+            setDb(firestoreDb);
+            setIsFirebaseInitialized(true); // Marca o Firebase como inicializado
+        } catch (error) {
+            console.error("Erro ao inicializar Firebase:", error);
+            setSubmissionMessage(`❌ Erro ao carregar o aplicativo: ${error.message}.`);
+            setIsFirebaseInitialized(false);
+        }
+    }, [firebaseConfig]); // Dependência para re-executar se a config mudar
 
     // Manipulador de mudança para atualizar o estado do formulário
     const handleChange = (e) => {
@@ -197,24 +158,20 @@ const App = () => {
     const handleSubmit = async (e) => { // Tornando a função assíncrona
         e.preventDefault(); // Impede o comportamento padrão de recarregar a página
 
-        // Verifica se o Firebase está pronto para uso
-        if (!isAuthReady || !db || !userId) {
-            // Se o Firebase não estiver pronto, impedimos o envio e mostramos uma mensagem de erro
-            setSubmissionMessage('❌ O aplicativo não está pronto para enviar dados. Por favor, certifique-se de estar autenticado.');
+        // Verifica se o Firebase está inicializado antes de tentar enviar
+        if (!isFirebaseInitialized || !db) {
+            setSubmissionMessage('❌ O aplicativo não está pronto para enviar dados. Por favor, tente novamente.');
             return;
         }
 
         if (validateForm()) {
             try {
-                // Define o nome da coleção com base no tipo de local
-                // Isso garante que as solicitações de "feirinha" e "residência" sejam salvas em coleções separadas.
-                // As regras de segurança do Firestore no Canvas esperam o caminho: /artifacts/{appId}/users/{userId}/{your_collection_name}
-                // Ou para dados públicos: /artifacts/{appId}/public/data/{your_collection_name}
-                // Para este formulário, vamos usar o caminho privado do usuário para as solicitações.
-                const userSpecificCollectionPath = `artifacts/${appId}/users/${userId}/solicitacoes-clientes`;
+                // Para formulários públicos sem autenticação de usuário, usamos o caminho público.
+                // As regras de segurança do Firestore no Canvas para dados públicos são: /artifacts/{appId}/public/data/{your_collection_name}
+                const publicCollectionPath = `artifacts/${appId}/public/data/solicitacoes-clientes-publicas`;
 
                 // Dados a serem salvos no Firestore
-                await addDoc(collection(db, userSpecificCollectionPath), {
+                await addDoc(collection(db, publicCollectionPath), {
                     nome: formData.nomeCompleto,
                     cpf: formData.cpf,
                     contato: formData.telefone,
@@ -244,7 +201,7 @@ const App = () => {
                     velocidade: '',     // Novo campo
                     valor: '',          // Novo campo
                     criadoEm: serverTimestamp(), // Usa serverTimestamp() para consistência e precisão
-                    userId: userId // Adiciona o ID do usuário que enviou a solicitação
+                    // Não há userId aqui, pois não há autenticação de usuário.
                 });
 
                 setSubmissionMessage('✅ Solicitação enviada com sucesso!');
