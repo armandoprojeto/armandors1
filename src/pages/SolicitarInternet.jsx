@@ -56,6 +56,9 @@ const App = () => {
         observacoes: '',
     });
 
+
+
+
     // Estado para controlar a mensagem de sucesso após o envio
     const [submissionMessage, setSubmissionMessage] = useState('');
 
@@ -64,13 +67,11 @@ const App = () => {
 
     // Efeito para inicializar o Firebase e autenticar o usuário
     useEffect(() => {
-        // Verifica se as configurações do Firebase estão disponíveis (mesmo que seja o fallback)
+        // Verifica se as configurações do Firebase estão disponíveis
         if (Object.keys(firebaseConfig).length === 0 || firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-            console.warn("Using placeholder Firebase config. Please provide your actual Firebase credentials for full functionality.");
-            setSubmissionMessage('Atenção: Usando configuração de Firebase placeholder. Por favor, forneça suas credenciais reais.');
-            // Permite que o app continue, mas as operações de DB falharão sem credenciais reais
-            // O `db` e `auth` podem não ser inicializados corretamente com credenciais falsas.
-            setIsAuthReady(true); // Marca como pronto para não bloquear o UI, mas o DB não funcionará.
+            console.warn("Using placeholder Firebase config. Please provide your actual Firebase credentials.");
+            setSubmissionMessage('Atenção: Configuração do Firebase inválida.');
+            setIsAuthReady(true);
             return;
         }
 
@@ -82,35 +83,35 @@ const App = () => {
             setDb(firestore);
             setAuth(firebaseAuth);
 
-            // Listener para o estado de autenticação
+            // Listener para mudanças de autenticação
             const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
                 if (user) {
                     setUserId(user.uid);
                 } else {
-                    // Se não houver usuário logado, tenta autenticar com o token personalizado
-                    try {
-                        if (initialAuthToken) {
+                    if (initialAuthToken) {
+                        try {
                             await signInWithCustomToken(firebaseAuth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(firebaseAuth); // Autenticação anônima se não houver token
+                            setUserId(firebaseAuth.currentUser?.uid || crypto.randomUUID());
+                        } catch (error) {
+                            console.error("Erro ao usar token personalizado:", error);
+                            setSubmissionMessage("Erro ao autenticar com token.");
                         }
-                        // Garante que userId é definido, mesmo para anônimos
-                        setUserId(firebaseAuth.currentUser?.uid || crypto.randomUUID());
-                    } catch (error) {
-                        console.error("Erro na autenticação:", error);
-                        setSubmissionMessage(`Erro na autenticação: ${error.message}. Por favor, tente novamente.`);
+                    } else {
+                        // Página pública: nenhuma autenticação será feita
+                        console.log("Página pública acessada sem autenticação.");
+                        setUserId(crypto.randomUUID()); // Opcional, caso precise de um ID temporário
                     }
                 }
-                setIsAuthReady(true); // Marca a autenticação como pronta
+
+                setIsAuthReady(true);
             });
 
-            // Cleanup do listener na desmontagem do componente
             return () => unsubscribe();
         } catch (error) {
             console.error("Erro na inicialização do Firebase:", error);
-            setSubmissionMessage(`Erro ao inicializar o aplicativo: ${error.message}.`);
+            setSubmissionMessage(`Erro ao inicializar o Firebase: ${error.message}.`);
         }
-    }, [firebaseConfig, initialAuthToken]); // Dependências do useEffect
+    }, [firebaseConfig, initialAuthToken]);
 
     // Manipulador de mudança para atualizar o estado do formulário
     const handleChange = (e) => {
