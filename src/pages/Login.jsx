@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { useNavigate } from "react-router-dom";
 
@@ -19,8 +19,14 @@ export default function Login() {
         }
 
         try {
+            // Configura persistência para sessão (dura só enquanto a aba estiver aberta)
+            await setPersistence(auth, browserSessionPersistence);
+
+            // Faz login normalmente
             await signInWithEmailAndPassword(auth, email, senha);
-            navigate("/"); // redireciona para a home/dashboard
+
+            // Redireciona para home/dashboard
+            navigate("/");
         } catch (error) {
             if (
                 error.code === "auth/user-not-found" ||
