@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 async function enviarMensagemWhatsApp(numero, mensagem) {
     try {
-        const response = await fetch("https://10.0.18.205/enviar-mensagem", {
+        const response = await fetch("https://7385c0ab1ea4.ngrok-free.app/enviar-mensagem", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ numero, mensagem }),
