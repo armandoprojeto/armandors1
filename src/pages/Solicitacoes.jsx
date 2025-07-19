@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 
 async function enviarMensagemWhatsApp(numero, mensagem) {
     try {
-        const response = await fetch("https://b53497263b88.ngrok-free.app/enviar-mensagem", {
+        const NGROK_URL = "https://a811ad4c3221.ngrok-free.app"; // Troque pelo valor do .env se usar variáveis
+        const response = await fetch(`${NGROK_URL}/enviar-mensagem`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ numero, mensagem }),
@@ -14,13 +15,14 @@ async function enviarMensagemWhatsApp(numero, mensagem) {
         const data = await response.json();
 
         if (!data.success) {
-            throw new Error(data.message);
+            throw new Error(data.message || "Erro desconhecido");
         }
     } catch (error) {
         console.error("Erro ao enviar mensagem:", error);
         throw error;
     }
 }
+
 // aqui estamos importando as dependências necessárias, incluindo o React, hooks do Firebase e a função para enviar mensagens via WhatsApp.//
 
 export default function Solicitacoes() {
