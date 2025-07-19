@@ -1,0 +1,5 @@
+# security.txt - Política de Segurança para provedores
+Contact: mailto:contato@provedor-two.vercel.app
+Policy: https://provedor-two.vercel.app/security-policy
+Preferred-Languages: pt, en
+Expires: 2026-01-01T00:00:00.000Z
