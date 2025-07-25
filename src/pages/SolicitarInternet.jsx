@@ -1,20 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app'; // Importar getApps e getApp
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-// As importações de autenticação (getAuth, signInWithCustomToken, onAuthStateChanged) não são mais necessárias para este caso de uso público.
 
-// Componente principal da aplicação
-const App = () => {
+// Componente do Formulário de Solicitação de Internet (adaptado do seu código anterior)
+const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
     // Configurações e variáveis globais do Firebase
-    // As variáveis __app_id, __firebase_config são injetadas pelo ambiente Canvas.
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-    // Configuração de fallback do Firebase se __firebase_config não estiver definida pelo ambiente
     const defaultFirebaseConfig = {
         apiKey: "AIzaSyD0MkcbzP4ygxaVgTxJckNP42J4YqvxFy0",
         authDomain: "login-56fda.firebaseapp.com",
         projectId: "login-56fda",
-        storageBucket: "login-56fda.firebasestorage.app",
+        storageBucket: "login-56fda.firebaseapp.com",
         messagingSenderId: "21549012582",
         appId: "1:21549012582:web:93c4020cfbc6741a877fa7",
         measurementId: "G-SVNXXJ2N4T"
@@ -22,74 +19,80 @@ const App = () => {
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' && Object.keys(JSON.parse(__firebase_config)).length > 0
         ? JSON.parse(__firebase_config)
-        : defaultFirebaseConfig; // Usa o fallback se a config do ambiente estiver vazia ou indefinida
+        : defaultFirebaseConfig;
 
-    // Estados para instâncias do Firebase
     const [db, setDb] = useState(null);
-    const [isFirebaseInitialized, setIsFirebaseInitialized] = useState(false); // Novo estado para indicar se o Firebase está inicializado
+    const [isFirebaseInitialized, setIsFirebaseInitialized] = useState(false);
 
-    // Estados para armazenar os dados do formulário
     const [formData, setFormData] = useState({
         nomeCompleto: '',
         cpf: '',
         telefone: '',
         email: '',
-        tipoLocal: '', // Novo campo: tipo de local
-        // Campos para Residência
+        tipoLocal: '',
         rua: '',
         numero: '',
-        complemento: '', // Novo campo: apartamento/bloco
+        complemento: '',
         bairro: '',
         cidade: '',
         estado: '',
         cep: '',
-        // Campos para Banca de Feirinha
-        numeroBanca: '', // Novo campo: número da banca
-        corredor: '',    // Novo campo: corredor (A-Z)
-        planoInteresse: '',
+        numeroBanca: '',
+        corredor: '',
+        planoInteresse: preselectedPlan || '', // Preenche com o plano selecionado ou vazio
         observacoes: '',
     });
 
-    // Estado para controlar a mensagem de sucesso após o envio
     const [submissionMessage, setSubmissionMessage] = useState('');
-
-    // Estados para controlar mensagens de erro para cada campo
     const [errors, setErrors] = useState({});
 
-    // Efeito para inicializar o Firebase (sem autenticação)
     useEffect(() => {
         try {
-            const app = initializeApp(firebaseConfig);
+            let app;
+            // Verifica se o aplicativo Firebase padrão já foi inicializado
+            if (!getApps().some(app => app.name === '[DEFAULT]')) {
+                // Se não houver app padrão, inicializa um novo
+                app = initializeApp(firebaseConfig);
+            } else {
+                // Se já houver um app padrão, o utiliza
+                app = getApp();
+            }
             const firestoreDb = getFirestore(app);
             setDb(firestoreDb);
-            setIsFirebaseInitialized(true); // Marca o Firebase como inicializado
+            setIsFirebaseInitialized(true);
         } catch (error) {
             console.error("Erro ao inicializar Firebase:", error);
             setSubmissionMessage(`❌ Erro ao carregar o aplicativo: ${error.message}.`);
             setIsFirebaseInitialized(false);
         }
-    }, [firebaseConfig]); // Dependência para re-executar se a config mudar
+    }, [firebaseConfig]);
 
-    // Manipulador de mudança para atualizar o estado do formulário
+    // Atualiza o plano preselecionado se a prop mudar
+    useEffect(() => {
+        if (preselectedPlan) {
+            setFormData(prevData => ({
+                ...prevData,
+                planoInteresse: preselectedPlan
+            }));
+        }
+    }, [preselectedPlan]);
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData((prevData) => ({
             ...prevData,
             [name]: value,
         }));
-        // Limpa o erro do campo quando o usuário começa a digitar
         setErrors((prevErrors) => ({
             ...prevErrors,
             [name]: '',
         }));
     };
 
-    // Função de validação do formulário
     const validateForm = () => {
         let newErrors = {};
         let isValid = true;
 
-        // Campos obrigatórios comuns a ambos os tipos de local
         const commonRequiredFields = [
             'nomeCompleto', 'cpf', 'telefone', 'email', 'tipoLocal', 'planoInteresse'
         ];
@@ -101,7 +104,6 @@ const App = () => {
             }
         });
 
-        // Campos obrigatórios condicionais baseados no 'tipoLocal'
         if (formData.tipoLocal === 'residencia') {
             const residenciaRequiredFields = ['rua', 'numero', 'bairro', 'cidade', 'estado', 'cep'];
             residenciaRequiredFields.forEach(field => {
@@ -120,31 +122,26 @@ const App = () => {
             });
         }
 
-        // Validação de e-mail
         if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
             newErrors.email = 'E-mail inválido.';
             isValid = false;
         }
 
-        // Validação de CPF (básica, sem algoritmo de validação)
         if (formData.cpf && !/^\d{11}$/.test(formData.cpf)) {
             newErrors.cpf = 'CPF deve conter 11 dígitos numéricos.';
             isValid = false;
         }
 
-        // Validação de Telefone (básica)
         if (formData.telefone && !/^\d{10,11}$/.test(formData.telefone)) {
             newErrors.telefone = 'Telefone deve conter 10 ou 11 dígitos numéricos (com DDD).';
             isValid = false;
         }
 
-        // Validação de CEP (básica)
         if (formData.cep && formData.tipoLocal === 'residencia' && !/^\d{8}$/.test(formData.cep)) {
             newErrors.cep = 'CEP deve conter 8 dígitos numéricos.';
             isValid = false;
         }
 
-        // Validação de Corredor (A-Z, sem distinção de maiúsculas/minúsculas)
         if (formData.corredor && formData.tipoLocal === 'feirinha' && !/^[A-Z]$/i.test(formData.corredor)) {
             newErrors.corredor = 'Corredor deve ser uma única letra de A a Z.';
             isValid = false;
@@ -154,11 +151,9 @@ const App = () => {
         return isValid;
     };
 
-    // Manipulador de envio do formulário
-    const handleSubmit = async (e) => { // Tornando a função assíncrona
-        e.preventDefault(); // Impede o comportamento padrão de recarregar a página
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
-        // Verifica se o Firebase está inicializado antes de tentar enviar
         if (!isFirebaseInitialized || !db) {
             setSubmissionMessage('❌ O aplicativo não está pronto para enviar dados. Por favor, tente novamente.');
             return;
@@ -166,18 +161,14 @@ const App = () => {
 
         if (validateForm()) {
             try {
-                // Para formulários públicos sem autenticação de usuário, usamos o caminho público.
-                // As regras de segurança do Firestore no Canvas para dados públicos são: /artifacts/{appId}/public/data/{your_collection_name}
-                const publicCollectionPath = `solicitacoes-clientes`;
+                const publicCollectionPath = `artifacts/${appId}/public/data/solicitacoes-clientes`;
 
-                // Dados a serem salvos no Firestore
                 await addDoc(collection(db, publicCollectionPath), {
                     nome: formData.nomeCompleto,
                     cpf: formData.cpf,
                     contato: formData.telefone,
                     email: formData.email,
                     local: formData.tipoLocal,
-                    // Campos específicos para Residência (serão incluídos se o tipoLocal for 'residencia')
                     ...(formData.tipoLocal === 'residencia' && {
                         rua: formData.rua,
                         numero: formData.numero,
@@ -187,25 +178,22 @@ const App = () => {
                         estado: formData.estado,
                         cep: formData.cep,
                     }),
-                    // Campos específicos para Feirinha (serão incluídos se o tipoLocal for 'feirinha')
                     ...(formData.tipoLocal === 'feirinha' && {
                         numeroBanca: formData.numeroBanca,
                         corredor: formData.corredor,
                     }),
                     plano: formData.planoInteresse,
                     observacoes: formData.observacoes,
-                    status: 'desativado', // Novo campo
-                    pago: 'não',        // Novo campo
-                    pppoe: '',          // Novo campo
-                    senha: '',          // Novo campo
-                    velocidade: '',     // Novo campo
-                    valor: '',          // Novo campo
-                    criadoEm: serverTimestamp(), // Usa serverTimestamp() para consistência e precisão
-                    // Não há userId aqui, pois não há autenticação de usuário.
+                    status: 'desativado',
+                    pago: 'não',
+                    pppoe: '',
+                    senha: '',
+                    velocidade: '',
+                    valor: '',
+                    criadoEm: serverTimestamp(),
                 });
 
                 setSubmissionMessage('✅ Solicitação enviada com sucesso!');
-                // Limpa o formulário após o envio
                 setFormData({
                     nomeCompleto: '',
                     cpf: '',
@@ -221,10 +209,10 @@ const App = () => {
                     cep: '',
                     numeroBanca: '',
                     corredor: '',
-                    planoInteresse: '',
+                    planoInteresse: preselectedPlan || '',
                     observacoes: '',
                 });
-                setErrors({}); // Limpa os erros também
+                setErrors({});
             } catch (error) {
                 console.error("Erro ao salvar no Firestore:", error);
                 setSubmissionMessage(`❌ Erro ao enviar sua solicitação: ${error.message}. Por favor, tente novamente.`);
@@ -547,50 +535,166 @@ const App = () => {
                             name="planoInteresse"
                             value={formData.planoInteresse}
                             onChange={handleChange}
+                            disabled={!!preselectedPlan} // Desabilita se um plano já foi preselecionado
                             className={`shadow appearance-none border rounded-lg w-full py-4 px-5 sm:py-5 sm:px-6 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-200 text-lg sm:text-xl ${errors.planoInteresse ? 'border-red-500' : 'border-gray-300'
+                                } ${preselectedPlan ? 'bg-gray-100 cursor-not-allowed' : '' // Estilo para campo desabilitado
                                 }`}
                             aria-label="Plano de Interesse"
                         >
                             <option value="">Selecione um plano</option>
-                            <option value="100mbps">100 Mbps - Residencial</option>
-                            <option value="300mbps">300 Mbps - Residencial</option>
-                            <option value="500mbps">500 Mbps - Residencial</option>
-                            <option value="fibra_empresarial">Fibra Óptica - Empresarial</option>
-                            <option value="outros">Outros / Não sei</option>
+                            <option value="Power conect 50 MEGA">Power conect 50 MEGA</option>
+                            <option value="Power conect 100 MEGA">Power conect 100 MEGA</option>
+                            <option value="Outro">Outro (especifique nas observações)</option>
                         </select>
                         {errors.planoInteresse && <p className="text-red-500 text-sm italic mt-1">{errors.planoInteresse}</p>}
                     </div>
 
-                    {/* Seção Observações */}
-                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-blue-700 mt-8 sm:mt-10 mb-4 sm:mb-5 border-b border-blue-200 pb-2">Observações</h2>
+                    {/* Campo de Observações */}
                     <div>
                         <label htmlFor="observacoes" className="block text-gray-700 text-lg sm:text-xl font-bold mb-2 sm:mb-3">
-                            Observações / Dúvidas
+                            Observações (Opcional)
                         </label>
                         <textarea
                             id="observacoes"
                             name="observacoes"
                             value={formData.observacoes}
                             onChange={handleChange}
-                            rows="4"
+                            rows="5"
                             className="shadow appearance-none border rounded-lg w-full py-4 px-5 sm:py-5 sm:px-6 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-200 border-gray-300 text-lg sm:text-xl"
-                            placeholder="Ex: Melhor horário para contato, dúvidas sobre cobertura, etc."
+                            placeholder="Adicione quaisquer observações ou perguntas adicionais aqui."
                             aria-label="Observações"
                         ></textarea>
                     </div>
 
                     {/* Botão de Envio */}
-                    <div className="flex justify-center mt-10 sm:mt-12">
+                    <div className="flex justify-center gap-4">
                         <button
                             type="submit"
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 px-10 sm:py-6 sm:px-12 rounded-full shadow-lg transform transition-all duration-300 ease-in-out hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 text-xl sm:text-2xl"
-                            aria-label="Enviar Solicitação"
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 sm:py-5 sm:px-12 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 text-xl sm:text-2xl shadow-lg"
                         >
                             Enviar Solicitação
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onBackToPlans}
+                            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-4 px-10 sm:py-5 sm:px-12 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 text-xl sm:text-2xl shadow-lg"
+                        >
+                            Voltar aos Planos
                         </button>
                     </div>
                 </form>
             </div>
+        </div>
+    );
+};
+
+// Componente da Landing Page com os planos
+const LandingPage = ({ onSelectPlan }) => {
+    const plans = [
+        {
+            name: "Power conect 50 MEGA", // Novo nome do plano
+            speed: "50 MEGA", // Nova velocidade
+            price: "79,90",
+            oldPrice: "99,90",
+            // economy: "20%", // Removido
+            features: [
+                "Suporte Premium" // Recurso atualizado
+            ],
+            type: "fibra"
+        },
+        {
+            name: "Power conect 100 MEGA", // Novo nome do plano
+            speed: "100 MEGA", // Nova velocidade
+            price: "159,90",
+            // economy: "33% AO MÊS", // Removido
+            features: [
+                "Atendimento Prioritário", // Recurso atualizado
+            ],
+            type: "fibra"
+        }
+    ];
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center justify-center p-4 font-inter">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-center text-blue-800 mb-6 sm:mb-10 border-b-4 border-blue-300 pb-2">
+                Internet de Verdade, para Você Conectar o Mundo!
+            </h1>
+            <p className="text-lg sm:text-xl lg:text-2xl text-center text-gray-700 mb-10 sm:mb-12 max-w-3xl">
+                Experimente a velocidade e estabilidade que você merece. Nossos planos são feitos para garantir sua melhor experiência online.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8 w-full max-w-5xl">
+                {plans.map((plan, index) => (
+                    <div
+                        key={index}
+                        className={`bg-white rounded-xl shadow-xl p-6 flex flex-col items-center text-center transform transition-all duration-300 hover:scale-105
+                            ${plan.type === 'fibra' ? 'border-t-8 border-blue-600' : // Alterado para blue
+                                plan.type === 'controle' ? 'border-t-8 border-orange-500' :
+                                    'border-t-8 border-purple-600'}
+                        `}
+                    >
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">{plan.name}</h2>
+                        {plan.speed && <p className="text-5xl font-extrabold text-blue-700 mb-4">{plan.speed}</p>}
+                        {plan.data && <p className="text-5xl font-extrabold text-blue-700 mb-2">{plan.data}</p>}
+                        {plan.dataBreakdown && <p className="text-gray-600 text-sm mb-4">{plan.dataBreakdown}</p>}
+
+                        <div className="mb-4">
+                            {plan.oldPrice && <p className="text-gray-500 line-through text-lg">De R$ {plan.oldPrice}</p>}
+                            <p className="text-4xl font-extrabold text-red-600">
+                                R$ {plan.price}<span className="text-xl font-semibold">/mês</span>
+                            </p>
+                            {/* {plan.economy && <p className="text-green-600 font-semibold mt-1">{plan.economy}</p>} */} {/* Removido */}
+                        </div>
+
+                        <ul className="text-gray-700 text-left w-full mb-6 space-y-2">
+                            {plan.features.map((feature, i) => (
+                                <li key={i} className="flex items-center text-lg">
+                                    <svg className="w-6 h-6 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                    {feature}
+                                </li>
+                            ))}
+                        </ul>
+
+                        <button
+                            onClick={() => onSelectPlan(plan.name)}
+                            className={`mt-auto w-full py-3 px-6 rounded-lg font-bold text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-md
+                                bg-blue-600 hover:bg-blue-700 text-white
+                            `}
+                        >
+                            Assinar
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// Novo Componente Principal da Aplicação
+const App = () => {
+    const [currentPage, setCurrentPage] = useState('landing'); // 'landing' ou 'form'
+    const [selectedPlan, setSelectedPlan] = useState('');
+
+    const handleSelectPlan = (planName) => {
+        setSelectedPlan(planName);
+        setCurrentPage('form');
+    };
+
+    const handleBackToPlans = () => {
+        setCurrentPage('landing');
+        setSelectedPlan(''); // Limpa o plano selecionado ao voltar
+    };
+
+    return (
+        <div>
+            {currentPage === 'landing' ? (
+                <LandingPage onSelectPlan={handleSelectPlan} />
+            ) : (
+                <SolicitacaoInternetForm
+                    preselectedPlan={selectedPlan}
+                    onBackToPlans={handleBackToPlans}
+                />
+            )}
         </div>
     );
 };

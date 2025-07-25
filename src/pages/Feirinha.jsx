@@ -1,10 +1,25 @@
+// ... Importações
 import { useEffect, useState } from "react";
-import { collection, getDocs, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { db } from "../firebaseConfig"; // Ensure this path is correct
+import {
+    collection,
+    getDocs,
+    deleteDoc,
+    doc,
+    updateDoc,
+    query,
+    where,
+} from "firebase/firestore";
+import { db } from "../firebaseConfig";
 import { useNavigate } from "react-router-dom";
-import { FaEdit, FaTrashAlt, FaSearch, FaCheck, FaTimes } from "react-icons/fa";
+import {
+    FaEdit,
+    FaTrashAlt,
+    FaCheck,
+    FaTimes,
+    FaMoneyBillWave
+} from "react-icons/fa";
 
-export default function Feirinha() {
+export default function FeirinhaClientes() {
     const [clientes, setClientes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
@@ -17,34 +32,55 @@ export default function Feirinha() {
     async function carregarClientes() {
         setLoading(true);
         try {
-            const colecaoRef = collection(db, "feirinha-clientes");
-            const snapshot = await getDocs(colecaoRef);
-            const lista = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-            setClientes(lista);
+            const refFeirinha = collection(db, "feirinha-clientes");
+            const refResidencia = collection(db, "residencia-clientes");
+
+            const [snapFeirinha, snapResidencia] = await Promise.all([
+                getDocs(refFeirinha),
+                getDocs(refResidencia),
+            ]);
+
+            const dadosFeirinha = snapFeirinha.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const dadosResidencia = snapResidencia.docs.map(doc => doc.data());
+
+            const cpfsComPontoNaoCortesia = new Set();
+            [...dadosFeirinha, ...dadosResidencia].forEach(cliente => {
+                if (cliente.status !== "cortesia" && cliente.cpf) {
+                    cpfsComPontoNaoCortesia.add(cliente.cpf);
+                }
+            });
+
+            const clientesValidos = dadosFeirinha.filter(cliente =>
+                cpfsComPontoNaoCortesia.has(cliente.cpf)
+            );
+
+            setClientes(clientesValidos);
         } catch (error) {
-            console.error("Erro ao carregar clientes da feirinha:", error);
+            alert("Erro ao carregar clientes. Verifique o console.");
+            console.error(error);
         } finally {
             setLoading(false);
         }
     }
 
     async function excluirCliente(id) {
-        if (!window.confirm("Deseja realmente excluir esse cliente?")) return;
+        if (!window.confirm("Deseja excluir esse cliente?")) return;
         try {
             await deleteDoc(doc(db, "feirinha-clientes", id));
             setClientes((old) => old.filter((c) => c.id !== id));
         } catch (error) {
-            alert("Erro ao excluir cliente");
-            console.error(error);
+            alert("Erro ao excluir cliente.");
         }
     }
 
     async function toggleStatus(cliente) {
         try {
-            const novoStatus = cliente.status === "ativado" ? "desativado" : "ativado";
+            let novoStatus = cliente.status === "ativado"
+                ? "desativado"
+                : cliente.status === "desativado"
+                    ? "cortesia"
+                    : "ativado";
+
             await updateDoc(doc(db, "feirinha-clientes", cliente.id), {
                 status: novoStatus,
             });
@@ -52,152 +88,146 @@ export default function Feirinha() {
                 old.map((c) => (c.id === cliente.id ? { ...c, status: novoStatus } : c))
             );
         } catch (error) {
-            alert("Erro ao atualizar status");
-            console.error(error);
+            alert("Erro ao atualizar status.");
         }
     }
 
     async function togglePagamento(cliente) {
         try {
+            if (cliente.status === "cortesia") return;
             const novoPago = cliente.pago === "sim" ? "não" : "sim";
             await updateDoc(doc(db, "feirinha-clientes", cliente.id), {
                 pago: novoPago,
             });
             setClientes((old) =>
-                old.map((c) =>
-                    c.id === cliente.id ? { ...c, pago: novoPago } : c
-                )
+                old.map((c) => (c.id === cliente.id ? { ...c, pago: novoPago } : c))
             );
         } catch (error) {
-            alert("Erro ao atualizar status de pagamento");
-            console.error(error);
+            alert("Erro ao atualizar pagamento.");
         }
     }
 
     function formatarValor(valor) {
         const numero = Number(valor);
-        return numero.toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-        });
+        return isNaN(numero)
+            ? "R$ 0,00"
+            : numero.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    async function handleGerarPix(cpfCliente) {
+        try {
+            const refFeirinha = collection(db, "feirinha-clientes");
+            const refResidencia = collection(db, "residencia-clientes");
+
+            const q1 = query(refFeirinha, where("cpf", "==", cpfCliente));
+            const q2 = query(refResidencia, where("cpf", "==", cpfCliente));
+
+            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+            const todosPontos = [...snap1.docs, ...snap2.docs].map(doc => doc.data());
+
+            const valorTotal = todosPontos
+                .filter(p => p.status !== "cortesia")
+                .reduce((soma, atual) => soma + Number(atual.valor || 0), 0);
+
+            if (valorTotal <= 0) {
+                alert("Cliente com todos os pontos cortesia ou sem valor a pagar.");
+                return;
+            }
+
+            navigate(`/gerar-pix?cpf=${cpfCliente}&valor=${valorTotal}`);
+        } catch (error) {
+            alert("Erro ao gerar Pix.");
+        }
     }
 
     const filteredClientes = clientes.filter((cliente) =>
-        Object.values(cliente).some(
-            (value) =>
-                typeof value === "string" &&
-                value.toLowerCase().includes(searchTerm.toLowerCase())
+        Object.values(cliente).some((value) =>
+            typeof value === "string" &&
+            value.toLowerCase().includes(searchTerm.toLowerCase())
         )
     );
 
-    if (loading) return <p className="p-4">Carregando clientes...</p>;
+    if (loading) return <p>Carregando...</p>;
 
     return (
-        <div className="p-4 sm:p-6 max-w-screen-xl mx-auto">
-            <h1 className="text-2xl sm:text-3xl font-bold mb-4">Clientes da Feirinha</h1>
+        <div className="p-6">
+            <h2 className="text-2xl font-bold text-left mb-4 text-black bg-transparent">Feirinha</h2>
 
-            <div className="mb-4 relative w-full sm:w-1/2 lg:w-1/3">
+            <div className="mb-4 flex justify-start">
                 <input
                     type="text"
                     placeholder="Buscar cliente..."
-                    className="p-2 pl-9 text-sm border border-gray-300 rounded-md w-full focus:ring-blue-500 focus:border-blue-500"
+                    className="border px-4 py-2 rounded shadow w-[30%]"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
-                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm" />
             </div>
 
-            {filteredClientes.length === 0 && searchTerm !== "" ? (
-                <p>Nenhum cliente encontrado com os termos de busca.</p>
-            ) : filteredClientes.length === 0 && searchTerm === "" ? (
-                <p>Nenhum cliente encontrado na feirinha.</p>
-            ) : (
-                <div className="overflow-x-auto shadow-md rounded-lg">
-                    <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
-                            <tr>
-                                <th scope="col" className="px-4 py-3 border border-gray-300">Nome</th>
-                                <th scope="col" className="px-2 py-1 border border-gray-300 hidden sm:table-cell min-w-[7.5rem] whitespace-nowrap">CPF</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300">Contato</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300 hidden md:table-cell">Número</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300 hidden lg:table-cell">Usuário PPPoE</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300 hidden lg:table-cell">Senha PPPoE</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300">Velocidade</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300">Valor</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300">Pago</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300">Status</th>
-                                <th scope="col" className="px-4 py-3 border border-gray-300 text-center">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredClientes.map((cliente) => (
-                                <tr key={cliente.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                    <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap dark:text-white border border-gray-300">{cliente.nome}</td>
-                                    <td className="px-2 py-1 border border-gray-300 hidden sm:table-cell whitespace-nowrap">{cliente.cpf}</td>
-                                    <td className="px-4 py-3 border border-gray-300">{cliente.contato}</td>
-                                    <td className="px-4 py-3 border border-gray-300 hidden md:table-cell">{cliente.numero}</td>
-                                    <td className="px-4 py-3 border border-gray-300 hidden lg:table-cell">{cliente.pppoe}</td>
-                                    <td className="px-4 py-3 border border-gray-300 hidden lg:table-cell">{cliente.senha}</td>
-                                    <td className="px-4 py-3 border border-gray-300">{cliente.velocidade}</td>
-                                    <td className="px-4 py-3 border border-gray-300">{formatarValor(cliente.valor)}</td>
-                                    <td className="px-4 py-3 border border-gray-300">
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-center border border-gray-300 table-fixed">
+                    <thead className="bg-gray-100 text-base">
+                        <tr>
+                            <th className="text-left pl-2 w-[300px] border border-gray-300">Nome</th>
+                            <th className="border border-gray-300 px-6">CPF</th>
+                            <th className="border border-gray-300 px-6">Contato</th>
+                            <th className="border border-gray-300 px-6">Usuário</th>
+                            <th className="border border-gray-300 px-6">Senha</th>
+                            <th className="border border-gray-300 px-6">Velocidade</th>
+                            <th className="border border-gray-300 px-6">Valor</th>
+                            <th className="border border-gray-300 px-6">Pago</th>
+                            <th className="border border-gray-300 px-6">Status</th>
+                            <th className="border border-gray-300 px-6">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredClientes.map((cliente) => (
+                            <tr key={cliente.id} className="border border-gray-300 h-[60px]">
+                                <td className="text-left pl-2 border border-gray-300 whitespace-nowrap truncate font-semibold">{cliente.nome}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.cpf}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.contato}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.usuarioPppoe}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.senha}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.velocidade}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">{formatarValor(cliente.valor)}</td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">
+                                    {cliente.status === "cortesia" ? (
+                                        <span className="text-yellow-600 font-semibold">Cortesia</span>
+                                    ) : (
                                         <button
                                             onClick={() => togglePagamento(cliente)}
-                                            className={`px-3 py-1 text-xs font-medium rounded-full ${cliente.pago === "sim"
-                                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                                                : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-                                                }`}
+                                            className={`px-2 py-1 rounded text-white text-xs ${cliente.pago === "sim" ? "bg-green-500" : "bg-red-500"}`}
                                         >
                                             {cliente.pago === "sim" ? "Sim" : "Não"}
                                         </button>
-                                    </td>
-                                    <td className="px-4 py-3 border border-gray-300 capitalize">
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${cliente.status === "ativado"
-                                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-                                            : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"
-                                            }`}>
-                                            {cliente.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 border border-gray-300 space-y-1 sm:space-y-0 sm:space-x-1 flex flex-col sm:flex-row items-center justify-center">
-                                        <button
-                                            onClick={() => navigate(`/editar/${cliente.id}/feirinha`)}
-                                            className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                                            title="Editar"
-                                        >
-                                            <FaEdit className="w-4 h-4" />
+                                    )}
+                                </td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">
+                                    <span className={`px-2 py-1 rounded text-white text-xs ${cliente.status === "ativado" ? "bg-green-500" : cliente.status === "desativado" ? "bg-red-500" : "bg-yellow-500"}`}>
+                                        {cliente.status === "ativado" ? "Ativado" : cliente.status === "desativado" ? "Desativado" : "Cortesia"}
+                                    </span>
+                                </td>
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">
+                                    <div className="flex gap-1 flex-wrap justify-center">
+                                        <button onClick={() => navigate(`/editar/${cliente.id}/feirinha`)} className="bg-blue-500 text-white p-2 rounded">
+                                            <FaEdit size={14} />
                                         </button>
-                                        <button
-                                            onClick={() => excluirCliente(cliente.id)}
-                                            className="p-2 bg-red-600 text-white rounded hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                                            title="Excluir"
-                                        >
-                                            <FaTrashAlt className="w-4 h-4" />
+                                        <button onClick={() => excluirCliente(cliente.id)} className="bg-red-500 text-white p-2 rounded">
+                                            <FaTrashAlt size={14} />
                                         </button>
-                                        {/* Botão de Status com Ícones - Lógica de cores e ícones ajustada */}
-                                        <button
-                                            onClick={() => toggleStatus(cliente)}
-                                            className={`p-2 rounded focus:outline-none focus:ring-2 focus:ring-offset-2
-                                                ${cliente.status === "ativado"
-                                                    ? "bg-green-500 text-white hover:bg-green-600 focus:ring-green-500" // Se está ATIVADO, mostra VERDE (✓)
-                                                    : "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500" // Se está DESATIVADO, mostra VERMELHO (✕)
-                                                }
-                                            `}
-                                            title={cliente.status === "ativado" ? "Desativar Cliente" : "Ativar Cliente"}
-                                        >
-                                            {cliente.status === "ativado" ? (
-                                                <FaCheck className="w-4 h-4" /> // Se está ATIVADO, mostra o CHECK (✓)
-                                            ) : (
-                                                <FaTimes className="w-4 h-4" /> // Se está DESATIVADO, mostra o X (✕)
-                                            )}
+                                        <button onClick={() => toggleStatus(cliente)} className={`text-white p-2 rounded ${cliente.status === "ativado" ? "bg-green-500" : cliente.status === "desativado" ? "bg-red-500" : "bg-yellow-500"}`}>
+                                            {cliente.status === "ativado" ? <FaCheck size={14} /> : cliente.status === "desativado" ? <FaTimes size={14} /> : <FaCheck size={14} />}
                                         </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                                        <button onClick={() => handleGerarPix(cliente.cpf)} className="bg-yellow-500 text-white p-2 rounded">
+                                            <FaMoneyBillWave size={14} />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 }
