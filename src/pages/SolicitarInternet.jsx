@@ -161,7 +161,7 @@ const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
 
         if (validateForm()) {
             try {
-                const publicCollectionPath = `artifacts/${appId}/public/data/solicitacoes-clientes`;
+                const publicCollectionPath = `solicitacoes-clientes`;
 
                 await addDoc(collection(db, publicCollectionPath), {
                     nome: formData.nomeCompleto,

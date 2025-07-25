@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "../firebaseConfig";
+import { db, auth } from "../firebaseConfig";
+import { onAuthStateChanged } from "firebase/auth";
 
 const SolicitacoesContext = createContext();
 
@@ -22,7 +23,13 @@ export function SolicitacoesProvider({ children }) {
     }
 
     useEffect(() => {
-        contarSolicitacoesPendentes();
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                contarSolicitacoesPendentes();
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
 
     return (
