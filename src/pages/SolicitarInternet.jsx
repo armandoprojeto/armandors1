@@ -1,8 +1,70 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app'; // Importar getApps e getApp
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
-// Componente do Formulário de Solicitação de Internet (adaptado do seu código anterior)
+// Componente para a seleção de planos
+const PlanSelection = ({ onSelectPlan }) => {
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center justify-center p-4 font-inter">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-center text-blue-800 mb-6 sm:mb-8 border-b-4 border-blue-300 pb-2">
+                Internet de Verdade, para Você Conectar o Mundo!
+            </h1>
+            <p className="text-lg sm:text-xl lg:text-2xl text-center text-gray-700 mb-8 sm:mb-10 max-w-2xl">
+                Experimente a velocidade e estabilidade que você merece. Nossos planos são feitos para garantir sua melhor experiência online.
+            </p>
+
+            <div className="flex flex-col md:flex-row gap-8 sm:gap-12 justify-center items-stretch w-full max-w-6xl"> {/* Usado items-stretch para garantir que os cartões tenham a mesma altura */}
+                {/* Cartão do Plano 50 MEGA */}
+                <div className="bg-white p-6 sm:p-8 rounded-xl shadow-xl flex flex-col items-center text-center w-full md:w-1/2 lg:w-1/3 transform transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl border-t-4 border-blue-500">
+                    <h2 className="text-3xl sm:text-4xl font-bold text-blue-700 mb-4">Power conect 50 MEGA</h2>
+                    <div className="flex flex-col items-center mb-6"> {/* Agrupamento dos elementos de preço para controle de layout */}
+                        <p className="text-5xl sm:text-6xl font-extrabold text-blue-600 mb-2">50 MEGA</p>
+                        <p className="text-lg text-gray-500 line-through mb-1">De R$ 99,90</p>
+                        <p className="text-4xl sm:text-5xl font-extrabold text-red-600">R$ 79,90<span className="text-xl font-normal">/mês</span></p>
+                    </div>
+                    <ul className="text-gray-700 text-lg sm:text-xl list-none p-0 mb-8 flex-grow flex flex-col justify-center"> {/* flex-grow para ocupar espaço e justify-center para alinhar verticalmente */}
+                        <li className="flex items-center justify-center mb-2">
+                            <svg className="w-6 h-6 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                            Suporte Premium
+                        </li>
+                    </ul>
+                    <button
+                        onClick={() => onSelectPlan("Power conect 50 MEGA")}
+                        className="w-full px-8 py-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-200 text-lg sm:text-xl shadow-lg mt-auto" /* mt-auto para empurrar o botão para o final do flex container */
+                        aria-label="Assinar Plano Power conect 50 MEGA"
+                    >
+                        Assinar
+                    </button>
+                </div>
+
+                {/* Cartão do Plano 100 MEGA */}
+                <div className="bg-white p-6 sm:p-8 rounded-xl shadow-xl flex flex-col items-center text-center w-full md:w-1/2 lg:w-1/3 transform transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl border-t-4 border-blue-500">
+                    <h2 className="text-3xl sm:text-4xl font-bold text-blue-700 mb-4">Power conect 100 MEGA</h2>
+                    <div className="flex flex-col items-center mb-6"> {/* Agrupamento dos elementos de preço para controle de layout */}
+                        <p className="text-5xl sm:text-6xl font-extrabold text-blue-600 mb-2">100 MEGA</p>
+                        <p className="text-lg text-gray-500 invisible mb-1">De R$ 99,90</p> {/* Placeholder invisível para alinhar com o preço "de" do outro cartão */}
+                        <p className="text-4xl sm:text-5xl font-extrabold text-red-600">R$ 159,90<span className="text-xl font-normal">/mês</span></p>
+                    </div>
+                    <ul className="text-gray-700 text-lg sm:text-xl list-none p-0 mb-8 flex-grow flex flex-col justify-center"> {/* flex-grow para ocupar espaço e justify-center para alinhar verticalmente */}
+                        <li className="flex items-center justify-center mb-2">
+                            <svg className="w-6 h-6 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                            Atendimento Prioritário
+                        </li>
+                    </ul>
+                    <button
+                        onClick={() => onSelectPlan("Power conect 100 MEGA")}
+                        className="w-full px-8 py-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-200 text-lg sm:text-xl shadow-lg mt-auto" /* mt-auto para empurrar o botão para o final do flex container */
+                        aria-label="Assinar Plano Power conect 100 MEGA"
+                    >
+                        Assinar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Componente do Formulário de Solicitação de Internet
 const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
     // Configurações e variáveis globais do Firebase
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -151,6 +213,25 @@ const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
         return isValid;
     };
 
+    // Função para obter a velocidade e o valor com base no plano
+    const getPlanDetails = (planName) => {
+        let velocidade = '';
+        let valor = '';
+
+        if (planName.includes('50 MEGA')) {
+            velocidade = '50 MEGA';
+            valor = 'R$ 79,90'; // Valor atualizado de acordo com a imagem
+        } else if (planName.includes('100 MEGA')) {
+            velocidade = '100 MEGA';
+            valor = 'R$ 159,90'; // Valor atualizado de acordo com a imagem
+        } else if (planName === 'Outro') {
+            velocidade = 'A definir';
+            valor = 'A definir';
+        }
+
+        return { velocidade, valor };
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -162,6 +243,9 @@ const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
         if (validateForm()) {
             try {
                 const publicCollectionPath = `solicitacoes-clientes`;
+
+                // Chame a nova função para obter a velocidade e o valor
+                const { velocidade, valor } = getPlanDetails(formData.planoInteresse);
 
                 await addDoc(collection(db, publicCollectionPath), {
                     nome: formData.nomeCompleto,
@@ -188,8 +272,8 @@ const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
                     pago: 'não',
                     pppoe: '',
                     senha: '',
-                    velocidade: '',
-                    valor: '',
+                    velocidade: velocidade,
+                    valor: valor,
                     criadoEm: serverTimestamp(),
                 });
 
@@ -559,27 +643,30 @@ const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
                             name="observacoes"
                             value={formData.observacoes}
                             onChange={handleChange}
-                            rows="5"
                             className="shadow appearance-none border rounded-lg w-full py-4 px-5 sm:py-5 sm:px-6 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 transition duration-200 border-gray-300 text-lg sm:text-xl"
-                            placeholder="Adicione quaisquer observações ou perguntas adicionais aqui."
-                            aria-label="Observações"
+                            placeholder="Ex: Apt 101, Bloco B"
+                            aria-label="Apartamento / Bloco"
                         ></textarea>
                     </div>
 
-                    {/* Botão de Envio */}
-                    <div className="flex justify-center gap-4">
+                    {/* Botões de Ação */}
+                    <div className="flex flex-col sm:flex-row justify-between gap-4 sm:gap-6 mt-8 sm:mt-10">
+                        {onBackToPlans && (
+                            <button
+                                type="button"
+                                onClick={onBackToPlans}
+                                className="w-full sm:w-auto px-8 py-4 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 transition duration-200 text-lg sm:text-xl"
+                                aria-label="Voltar para a seleção de planos"
+                            >
+                                Voltar para Planos
+                            </button>
+                        )}
                         <button
                             type="submit"
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-10 sm:py-5 sm:px-12 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 text-xl sm:text-2xl shadow-lg"
+                            className="w-full sm:w-auto px-8 py-4 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-200 text-lg sm:text-xl"
+                            aria-label="Enviar solicitação"
                         >
                             Enviar Solicitação
-                        </button>
-                        <button
-                            type="button"
-                            onClick={onBackToPlans}
-                            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-4 px-10 sm:py-5 sm:px-12 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 text-xl sm:text-2xl shadow-lg"
-                        >
-                            Voltar aos Planos
                         </button>
                     </div>
                 </form>
@@ -588,115 +675,28 @@ const SolicitacaoInternetForm = ({ preselectedPlan, onBackToPlans }) => {
     );
 };
 
-// Componente da Landing Page com os planos
-const LandingPage = ({ onSelectPlan }) => {
-    const plans = [
-        {
-            name: "Power conect 50 MEGA", // Novo nome do plano
-            speed: "50 MEGA", // Nova velocidade
-            price: "79,90",
-            oldPrice: "99,90",
-            // economy: "20%", // Removido
-            features: [
-                "Suporte Premium" // Recurso atualizado
-            ],
-            type: "fibra"
-        },
-        {
-            name: "Power conect 100 MEGA", // Novo nome do plano
-            speed: "100 MEGA", // Nova velocidade
-            price: "159,90",
-            // economy: "33% AO MÊS", // Removido
-            features: [
-                "Atendimento Prioritário", // Recurso atualizado
-            ],
-            type: "fibra"
-        }
-    ];
+// Componente principal da aplicação
+export default function App() {
+    const [selectedPlan, setSelectedPlan] = useState(null);
 
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col items-center justify-center p-4 font-inter">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-center text-blue-800 mb-6 sm:mb-10 border-b-4 border-blue-300 pb-2">
-                Internet de Verdade, para Você Conectar o Mundo!
-            </h1>
-            <p className="text-lg sm:text-xl lg:text-2xl text-center text-gray-700 mb-10 sm:mb-12 max-w-3xl">
-                Experimente a velocidade e estabilidade que você merece. Nossos planos são feitos para garantir sua melhor experiência online.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8 w-full max-w-5xl">
-                {plans.map((plan, index) => (
-                    <div
-                        key={index}
-                        className={`bg-white rounded-xl shadow-xl p-6 flex flex-col items-center text-center transform transition-all duration-300 hover:scale-105
-                            ${plan.type === 'fibra' ? 'border-t-8 border-blue-600' : // Alterado para blue
-                                plan.type === 'controle' ? 'border-t-8 border-orange-500' :
-                                    'border-t-8 border-purple-600'}
-                        `}
-                    >
-                        <h2 className="text-2xl font-bold text-gray-800 mb-2">{plan.name}</h2>
-                        {plan.speed && <p className="text-5xl font-extrabold text-blue-700 mb-4">{plan.speed}</p>}
-                        {plan.data && <p className="text-5xl font-extrabold text-blue-700 mb-2">{plan.data}</p>}
-                        {plan.dataBreakdown && <p className="text-gray-600 text-sm mb-4">{plan.dataBreakdown}</p>}
-
-                        <div className="mb-4">
-                            {plan.oldPrice && <p className="text-gray-500 line-through text-lg">De R$ {plan.oldPrice}</p>}
-                            <p className="text-4xl font-extrabold text-red-600">
-                                R$ {plan.price}<span className="text-xl font-semibold">/mês</span>
-                            </p>
-                            {/* {plan.economy && <p className="text-green-600 font-semibold mt-1">{plan.economy}</p>} */} {/* Removido */}
-                        </div>
-
-                        <ul className="text-gray-700 text-left w-full mb-6 space-y-2">
-                            {plan.features.map((feature, i) => (
-                                <li key={i} className="flex items-center text-lg">
-                                    <svg className="w-6 h-6 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                                    {feature}
-                                </li>
-                            ))}
-                        </ul>
-
-                        <button
-                            onClick={() => onSelectPlan(plan.name)}
-                            className={`mt-auto w-full py-3 px-6 rounded-lg font-bold text-xl transition duration-300 ease-in-out transform hover:scale-105 shadow-md
-                                bg-blue-600 hover:bg-blue-700 text-white
-                            `}
-                        >
-                            Assinar
-                        </button>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// Novo Componente Principal da Aplicação
-const App = () => {
-    const [currentPage, setCurrentPage] = useState('landing'); // 'landing' ou 'form'
-    const [selectedPlan, setSelectedPlan] = useState('');
-
-    const handleSelectPlan = (planName) => {
-        setSelectedPlan(planName);
-        setCurrentPage('form');
+    const handleSelectPlan = (plan) => {
+        setSelectedPlan(plan);
     };
 
     const handleBackToPlans = () => {
-        setCurrentPage('landing');
-        setSelectedPlan(''); // Limpa o plano selecionado ao voltar
+        setSelectedPlan(null);
     };
 
     return (
-        <div>
-            {currentPage === 'landing' ? (
-                <LandingPage onSelectPlan={handleSelectPlan} />
-            ) : (
+        <div className="App">
+            {selectedPlan ? (
                 <SolicitacaoInternetForm
                     preselectedPlan={selectedPlan}
                     onBackToPlans={handleBackToPlans}
                 />
+            ) : (
+                <PlanSelection onSelectPlan={handleSelectPlan} />
             )}
         </div>
     );
-};
-
-export default App;
+}

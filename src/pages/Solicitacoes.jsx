@@ -18,8 +18,33 @@ async function enviarMensagemWhatsApp(numero, mensagem) {
         }
     } catch (error) {
         console.error("Erro ao enviar mensagem:", error);
-        throw error; // Re-throw para que o chamador possa lidar com o erro
+        throw error;
     }
+}
+
+// Função para formatar valor monetário
+function formatarValor(valor) {
+    if (!valor) return "—";
+
+    // Se o valor já é um número
+    if (typeof valor === 'number') {
+        return `R$ ${valor.toFixed(2).replace('.', ',')}`;
+    }
+
+    // Se o valor é string, tenta converter
+    if (typeof valor === 'string') {
+        // Remove caracteres não numéricos exceto vírgula e ponto
+        const valorLimpo = valor.replace(/[^\d.,]/g, '');
+
+        // Substitui vírgula por ponto para conversão
+        const valorNumerico = parseFloat(valorLimpo.replace(',', '.'));
+
+        if (!isNaN(valorNumerico)) {
+            return `R$ ${valorNumerico.toFixed(2).replace('.', ',')}`;
+        }
+    }
+
+    return "—";
 }
 
 export default function Solicitacoes() {
@@ -34,6 +59,7 @@ export default function Solicitacoes() {
         });
 
         let unsubscribeSnapshot;
+        // Only set up snapshot listener if user is already authenticated on mount
         if (auth.currentUser) {
             const solicitacoesRef = collection(db, "solicitacoes-clientes");
             unsubscribeSnapshot = onSnapshot(solicitacoesRef, (snapshot) => {
@@ -45,6 +71,7 @@ export default function Solicitacoes() {
             });
         }
 
+        // Cleanup function for useEffect
         return () => {
             unsubscribeAuth();
             if (unsubscribeSnapshot) {
@@ -53,25 +80,23 @@ export default function Solicitacoes() {
         };
     }, [navigate]);
 
-    // Função para gerar o usuário PPPoE e senha
     const gerarPppoeESenha = (nome, cpf, contato) => {
-        // Gera o usuário PPPoE (3 primeiras letras do nome + 3 números aleatórios)
+        // Ensure nome is a string for substring
         const usuarioPppoe = `${(nome || '').substring(0, 3).toLowerCase()}${Math.floor(Math.random() * 1000)}`;
 
         let senha = '';
-        const cpfLimpo = (cpf || '').replace(/\D/g, ''); // Remove caracteres não numéricos do CPF
-        const contatoLimpo = (contato || '').replace(/\D/g, ''); // Remove caracteres não numéricos do contato
+        const cpfLimpo = (cpf || '').replace(/\D/g, ''); // Remove non-digits
+        const contatoLimpo = (contato || '').replace(/\D/g, ''); // Remove non-digits
 
-        const ultimos3Cpf = cpfLimpo.slice(-3); // Pega os últimos 3 dígitos do CPF
-        const ultimos3Contato = contatoLimpo.slice(-3); // Pega os últimos 3 dígitos do Contato
+        const ultimos3Cpf = cpfLimpo.slice(-3);
+        const ultimos3Contato = contatoLimpo.slice(-3);
 
-        // Concatena para formar a senha. Se algum não tiver 3 dígitos, pega o que tiver.
         senha = `${ultimos3Cpf}${ultimos3Contato}`;
 
-        // Garante que a senha não fique vazia se CPF/Contato estiverem ausentes ou curtos
+        // Ensure senha is at least 3 characters long if not enough from CPF/Contato
         if (senha.length < 3) {
-            senha += Math.floor(Math.random() * 1000).toString().padStart(3, '0'); // Adiciona 3 dígitos aleatórios
-            senha = senha.substring(0, 6); // Limita para um tamanho razoável se for aleatório
+            senha += Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            senha = senha.substring(0, 6); // Cap the length to 6 to avoid excessively long passwords
         }
 
         return { usuarioPppoe, senha };
@@ -85,18 +110,22 @@ export default function Solicitacoes() {
                 solicitacao.telefone || solicitacao.contato
             );
 
+            // Preserva o valor original da solicitação
             const updatedSolicitacao = {
                 ...solicitacao,
                 status: "Aguardando Instalação",
                 usuarioPppoe,
                 senha,
+                // Garante que o valor seja mantido
+                valor: solicitacao.valor || solicitacao.valorPlano || 0,
             };
 
             await setDoc(doc(db, "solicitacoes-clientes", solicitacao.id), updatedSolicitacao);
 
             const numero = (solicitacao.telefone || solicitacao.contato || '').replace(/\D/g, "");
             const nomeCliente = solicitacao.nomeCompleto || solicitacao.nome || "Cliente";
-            const mensagem = `Olá ${nomeCliente}, sua solicitação foi aprovada! Em breve entraremos em contato para agendar a instalação. Seu usuário PPPoE é: *${usuarioPppoe}* e a senha provisória é: *${senha}*. Guarde estas informações!`;
+            const valorFormatado = formatarValor(updatedSolicitacao.valor);
+            const mensagem = `Olá ${nomeCliente}, sua solicitação foi aprovada! Em breve entraremos em contato para agendar a instalação. Seu usuário PPPoE é: *${usuarioPppoe}* e a senha provisória é: *${senha}*. Valor do plano: ${valorFormatado}. Guarde estas informações!`;
 
             if (numero) {
                 await enviarMensagemWhatsApp(numero, mensagem);
@@ -122,6 +151,7 @@ export default function Solicitacoes() {
 
     async function cadastrarClienteNoBanco(solicitacao, local) {
         try {
+            // Re-generate PPPoE and senha if not already set (e.g., if coming directly from "Aguardando Instalação")
             const { usuarioPppoe, senha } = gerarPppoeESenha(
                 solicitacao.nomeCompleto || solicitacao.nome,
                 solicitacao.cpf,
@@ -131,13 +161,15 @@ export default function Solicitacoes() {
             const clienteParaCadastro = {
                 ...solicitacao,
                 status: "Não Ativado",
-                valorPago: 0.00,
+                valorPago: 0.00, // Default to 0.00 if not provided
                 dataCadastro: new Date().toISOString(),
-                usuarioPppoe: solicitacao.usuarioPppoe || usuarioPppoe, // Usa o que já existe ou gera novo
-                senha: solicitacao.senha || senha,                     // Usa o que já existe ou gera novo
-                velocidade: solicitacao.planoInteresse || solicitacao.plano || "N/A", // Salvar como 'velocidade'
+                usuarioPppoe: solicitacao.usuarioPppoe || usuarioPppoe, // Use existing if available, otherwise generate
+                senha: solicitacao.senha || senha, // Use existing if available, otherwise generate
+                velocidade: solicitacao.planoInteresse || solicitacao.plano || "N/A",
                 numeroBanca: solicitacao.numeroBanca || "N/A",
-                local: local.replace('-clientes', '') // Salva 'feirinha' ou 'residencia'
+                local: local.replace('-clientes', ''), // Adjust local name if necessary
+                // Garante que o valor seja preservado
+                valor: solicitacao.valor || solicitacao.valorPlano || 0,
             };
 
             await setDoc(doc(db, local, clienteParaCadastro.id), clienteParaCadastro);
@@ -160,87 +192,90 @@ export default function Solicitacoes() {
                 <p className="text-gray-600 mt-4">Nenhuma solicitação encontrada.</p>
             ) : (
                 <>
+                    {/* Display table only if there are solicitations for "feirinha" or "residencia" */}
                     {solicitacoes.some((s) => s.local === "feirinha" || s.local === "residencia") && (
                         <>
                             <h2 className="text-xl font-bold mt-8 mb-4 text-blue-700">
                                 Clientes Pendentes de Ativação
                             </h2>
-                            <table className="min-w-full bg-white border-collapse border border-gray-300 shadow-sm rounded-lg">
-                                <thead className="bg-blue-100 text-blue-800">
-                                    <tr>
-                                        <th className="px-3 py-2 border text-left">NOME</th>
-                                        <th className="px-3 py-2 border">CPF</th>
-                                        <th className="px-3 py-2 border">CONTATO</th>
-                                        <th className="px-3 py-2 border">NÚMERO</th> {/* Corresponde a numeroBanca */}
-                                        <th className="px-3 py-2 border">USUÁRIO PPPOE</th>
-                                        <th className="px-3 py-2 border">SENHA PPPOE</th>
-                                        <th className="px-3 py-2 border">VELOCIDADE</th> {/* Corresponde a planoInteresse/plano */}
-                                        <th className="px-3 py-2 border">VALOR</th> {/* Será 0,00 para solicitações */}
-                                        <th className="px-3 py-2 border">PAGO</th> {/* Será "Não" para solicitações */}
-                                        <th className="px-3 py-2 border">STATUS</th>
-                                        <th className="px-3 py-2 border text-center">AÇÕES</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {solicitacoes
-                                        .filter((s) => s.local === "feirinha" || s.local === "residencia")
-                                        .map((s) => (
-                                            <tr key={s.id} className="even:bg-gray-50 hover:bg-gray-100 transition-colors duration-150">
-                                                <td className="px-3 py-2 border text-left font-medium text-gray-900">
-                                                    {s.nomeCompleto || s.nome || "N/A"}
-                                                </td>
-                                                <td className="px-3 py-2 border text-center text-gray-700">{s.cpf || "N/A"}</td>
-                                                <td className="px-3 py-2 border text-center text-gray-700">{s.telefone || s.contato || "N/A"}</td>
-                                                <td className="px-3 py-2 border text-center text-gray-700">{s.numeroBanca || "—"}</td> {/* Exibindo numeroBanca */}
-                                                <td className="px-3 py-2 border text-center text-gray-700">
-                                                    {s.status === "Aguardando Instalação" ? s.usuarioPppoe : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 border text-center text-gray-700">
-                                                    {s.status === "Aguardando Instalação" ? s.senha : "—"}
-                                                </td>
-                                                <td className="px-3 py-2 border text-center text-gray-700">{s.planoInteresse || s.plano || "—"}</td> {/* Exibindo plano/velocidade */}
-                                                <td className="px-3 py-2 border text-center text-gray-700">
-                                                    R$ 0,00 {/* Sempre 0,00 para solicitações */}
-                                                </td>
-                                                <td className="px-3 py-2 border text-center capitalize">
-                                                    <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                                                        Não {/* Sempre "Não" para solicitações */}
-                                                    </span>
-                                                </td>
-                                                <td className="px-3 py-2 border text-center capitalize">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${s.status === "Aguardando Instalação" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
-                                                        {s.status || "Pendente"}
-                                                    </span>
-                                                </td>
-                                                <td className="px-3 py-2 border text-center whitespace-nowrap">
-                                                    {s.status !== "Aguardando Instalação" ? (
-                                                        <>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white border-collapse border border-gray-300 shadow-sm rounded-lg">
+                                    <thead className="bg-blue-100 text-blue-800">
+                                        <tr>
+                                            <th className="px-3 py-2 border text-left">NOME</th>
+                                            <th className="px-3 py-2 border">CPF</th>
+                                            <th className="px-3 py-2 border">CONTATO</th>
+                                            <th className="px-3 py-2 border">NÚMERO</th>
+                                            <th className="px-3 py-2 border">USUÁRIO PPPOE</th>
+                                            <th className="px-3 py-2 border">SENHA PPPOE</th>
+                                            <th className="px-3 py-2 border">VELOCIDADE</th>
+                                            <th className="px-3 py-2 border">VALOR</th>
+                                            <th className="px-3 py-2 border">PAGO</th>
+                                            <th className="px-3 py-2 border">STATUS</th>
+                                            <th className="px-3 py-2 border text-center">AÇÕES</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {solicitacoes
+                                            .filter((s) => s.local === "feirinha" || s.local === "residencia")
+                                            .map((s) => (
+                                                <tr key={s.id} className="even:bg-gray-50 hover:bg-gray-100 transition-colors duration-150">
+                                                    <td className="px-3 py-2 border text-left font-medium text-gray-900">
+                                                        {s.nomeCompleto || s.nome || "N/A"}
+                                                    </td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700">{s.cpf || "N/A"}</td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700">{s.telefone || s.contato || "N/A"}</td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700">{s.numeroBanca || "—"}</td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700">
+                                                        {s.status === "Aguardando Instalação" ? s.usuarioPppoe : "—"}
+                                                    </td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700">
+                                                        {s.status === "Aguardando Instalação" ? s.senha : "—"}
+                                                    </td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700">{s.planoInteresse || s.plano || "—"}</td>
+                                                    <td className="px-3 py-2 border text-center text-gray-700 font-semibold">
+                                                        {formatarValor(s.valor || s.valorPlano)}
+                                                    </td>
+                                                    <td className="px-3 py-2 border text-center capitalize">
+                                                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                                            Não
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-2 border text-center capitalize">
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${s.status === "Aguardando Instalação" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
+                                                            {s.status || "Pendente"}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-2 border text-center whitespace-nowrap">
+                                                        {s.status !== "Aguardando Instalação" ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => aprovarSolicitacao(s)}
+                                                                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200"
+                                                                >
+                                                                    Aprovar
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => naoAprovarSolicitacao(s)}
+                                                                    className="ml-2 px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200"
+                                                                >
+                                                                    Não Aprovar
+                                                                </button>
+                                                            </>
+                                                        ) : (
                                                             <button
-                                                                onClick={() => aprovarSolicitacao(s)}
-                                                                className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200"
+                                                                onClick={() => cadastrarClienteNoBanco(s, s.local === "feirinha" ? "feirinha-clientes" : "residencia-clientes")}
+                                                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
                                                             >
-                                                                Aprovar
+                                                                Cadastrar Cliente
                                                             </button>
-                                                            <button
-                                                                onClick={() => naoAprovarSolicitacao(s)}
-                                                                className="ml-2 px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200"
-                                                            >
-                                                                Não Aprovar
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => cadastrarClienteNoBanco(s, s.local === "feirinha" ? "feirinha-clientes" : "residencia-clientes")}
-                                                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors duration-200"
-                                                        >
-                                                            Cadastrar Cliente
-                                                        </button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                </tbody>
-                            </table>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </>
                     )}
                 </>

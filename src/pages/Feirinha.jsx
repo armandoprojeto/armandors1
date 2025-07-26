@@ -94,7 +94,9 @@ export default function FeirinhaClientes() {
 
     async function togglePagamento(cliente) {
         try {
+            // Only allow toggling if the status is NOT "cortesia"
             if (cliente.status === "cortesia") return;
+
             const novoPago = cliente.pago === "sim" ? "não" : "sim";
             await updateDoc(doc(db, "feirinha-clientes", cliente.id), {
                 pago: novoPago,
@@ -189,10 +191,25 @@ export default function FeirinhaClientes() {
                                 <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.usuarioPppoe}</td>
                                 <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.senha}</td>
                                 <td className="border border-gray-300 px-6 whitespace-nowrap">{cliente.velocidade}</td>
-                                <td className="border border-gray-300 px-6 whitespace-nowrap">{formatarValor(cliente.valor)}</td>
                                 <td className="border border-gray-300 px-6 whitespace-nowrap">
+                                    {cliente.status === "cortesia"
+                                        ? "R$ 0,00"
+                                        : formatarValor(
+                                            typeof cliente.valor === "string"
+                                                ? parseFloat(
+                                                    cliente.valor
+                                                        .replace("R$", "")
+                                                        .replace(/\./g, "")
+                                                        .replace(",", ".")
+                                                )
+                                                : cliente.valor
+                                        )}
+                                </td>
+
+                                <td className="border border-gray-300 px-6 whitespace-nowrap">
+                                    {/* MODIFIED: Display "Cortesia" span if status is "cortesia" */}
                                     {cliente.status === "cortesia" ? (
-                                        <span className="text-yellow-600 font-semibold">Cortesia</span>
+                                        <span className="px-2 py-1 rounded text-yellow-600 font-semibold bg-yellow-100">Cortesia</span>
                                     ) : (
                                         <button
                                             onClick={() => togglePagamento(cliente)}
